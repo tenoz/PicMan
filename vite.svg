@@ -1,0 +1,30 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background Container -->
+  <rect width="512" height="512" rx="120" fill="url(#grad)"/>
+  
+  <!-- Camera Body Stylized -->
+  <rect x="96" y="144" width="320" height="240" rx="40" fill="white" />
+  
+  <!-- Viewfinder hump -->
+  <path d="M160 144 L190 96 H322 L352 144 Z" fill="white"/>
+  
+  <!-- Lens System / Eye -->
+  <circle cx="256" cy="264" r="95" fill="#2563eb" />
+  <circle cx="256" cy="264" r="75" fill="#1e40af" />
+  
+  <!-- Aperture Blades -->
+  <g transform="translate(256, 264)" fill="white">
+     <path d="M0 -55 L15 -15 L55 0 L15 15 L0 55 L-15 15 L-55 0 L-15 -15 Z" opacity="0.9"/>
+     <circle cx="0" cy="0" r="20" fill="white" />
+  </g>
+
+  <!-- Flash/Spark Accent -->
+  <circle cx="360" cy="190" r="16" fill="#f59e0b" />
+</svg>

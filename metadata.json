@@ -1,0 +1,5 @@
+{
+  "name": "图片侠 PicMan v1",
+  "description": "一款强大的、离线优先的批量图片处理工具，支持在浏览器内进行格式转换、压缩、调整大小和添加水印。",
+  "requestFramePermissions": []
+}
