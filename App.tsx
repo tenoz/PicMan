@@ -161,6 +161,7 @@ function App() {
   }, [previewFile, files, showInfo, showLogs]);
 
 
+
   // --- Window Close / Exit Handling ---
   // Check if there are pending tasks (imported but not processed, or processed but not exported)
   const hasPendingTasks = useMemo(() => {
@@ -169,52 +170,47 @@ function App() {
     return hasUnprocessed || hasUnexported;
   }, [files]);
 
-  // Handle Cmd+Q and window close
+  // Handle Cmd+Q and exit requests from Tauri
   useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (hasPendingTasks) {
-        e.preventDefault();
-        e.returnValue = '您有未完成的任务，确定要退出吗？';
-        return e.returnValue;
-      }
-    };
-
-    // Listen for Tauri close request event
-    const listenCloseRequest = async () => {
+    const setupExitListener = async () => {
       // @ts-ignore
       const tauri = window.__TAURI__;
       if (!tauri?.event) return;
 
-      const { listen } = tauri.event;
+      const { listen, emit } = tauri.event;
       
-      // Listen for exit request from Tauri
-      const unlisten = await listen('tauri://exit-request', async () => {
+      // Listen for exit request from Tauri backend
+      const unlisten = await listen('app-exit-requested', async () => {
         if (hasPendingTasks) {
           const confirmed = confirm('您有未完成的任务：\n\n' +
             '- 部分文件尚未转换\n' +
             '- 部分文件尚未导出\n\n' +
             '确定要退出应用吗？');
           
-          if (!confirmed) {
-            // Prevent exit by sending event back to Tauri
+          if (confirmed) {
+            // User confirmed exit - actually exit the app
             // @ts-ignore
-            await tauri.event.emit('tauri://exit-cancelled');
+            await tauri.process.exit(0);
           }
+          // If not confirmed, do nothing and app keeps running
+        } else {
+          // No pending tasks - exit immediately
+          // @ts-ignore
+          await tauri.process.exit(0);
         }
       });
 
       return unlisten;
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
     let unlistenFn: (() => void) | undefined;
-    listenCloseRequest().then(fn => { unlistenFn = fn; });
+    setupExitListener().then(fn => { unlistenFn = fn; });
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
       if (unlistenFn) unlistenFn();
     };
   }, [hasPendingTasks]);
+
 
   // --- Helpers ---
   const showNotification = (msg: string, type: 'success' | 'error') => {
