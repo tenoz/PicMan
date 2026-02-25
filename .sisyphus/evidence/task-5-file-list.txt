@@ -1,0 +1,60 @@
+# Task 2.3 - Committed File List
+
+Date: Tue Feb 24 2026
+
+## Committed Files (45 total)
+
+### Configuration Files
+- .gitignore
+- .sisyphus/boulder.json
+- .sisyphus/drafts/health-check-report.md
+- .sisyphus/evidence/task-1-init.txt
+- .sisyphus/evidence/task-3-dsstore-clean.txt
+- .sisyphus/plans/git-history-cleanup.md
+- .sisyphus/plans/git-reinitialize.md
+
+### Frontend Source Files
+- App.tsx
+- README.md
+- components/ConfigPanel.tsx
+- components/FileList.tsx
+- components/ImportZone.tsx
+- components/LogViewer.tsx
+- constants.ts
+- fix_build.cjs
+- index.html
+- index.tsx
+- metadata.json
+- package.json
+- services/imageProcessor.ts
+- src-tauri/Cargo.toml
+- src-tauri/build.rs
+- src-tauri/src/main.rs
+- src-tauri/tauri.conf.json
+- tsconfig.json
+- types.ts
+- utils.ts
+- vite.config.ts
+- vite.svg
+
+### Tauri Icons (17 files)
+- src-tauri/icons/128x128.png
+- src-tauri/icons/128x128@2x.png
+- src-tauri/icons/32x32.png
+- src-tauri/icons/Square107x107Logo.png
+- src-tauri/icons/Square142x142Logo.png
+- src-tauri/icons/Square150x150Logo.png
+- src-tauri/icons/Square284x284Logo.png
+- src-tauri/icons/Square30x30Logo.png
+- src-tauri/icons/Square310x310Logo.png
+- src-tauri/icons/Square44x44Logo.png
+- src-tauri/icons/Square71x71Logo.png
+- src-tauri/icons/Square89x89Logo.png
+- src-tauri/icons/StoreLogo.png
+- src-tauri/icons/icon.icns
+- src-tauri/icons/icon.ico
+- src-tauri/icons/icon.png
+
+## Summary
+- Total files: 45
+- Total insertions: 5741 lines
