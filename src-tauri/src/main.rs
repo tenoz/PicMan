@@ -1,10 +1,9 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{WindowEvent, CustomMenuItem, Menu, MenuItem, Submenu, Manager};
+use tauri::{WindowEvent, RunEvent, CustomMenuItem, Menu, MenuItem, Submenu, Manager};
 
 fn main() {
-    // Create menu with Quit item that has accelerator
     let quit = CustomMenuItem::new("quit", "Quit").accelerator("Command+Q");
     let hide = CustomMenuItem::new("hide", "Hide").accelerator("Command+H");
     let close = CustomMenuItem::new("close", "Close").accelerator("Command+W");
@@ -18,7 +17,7 @@ fn main() {
 
     let menu = Menu::new().add_submenu(Submenu::new("PicMan", app_menu));
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .menu(menu)
         .on_menu_event(|event| {
             match event.menu_item_id() {
@@ -41,15 +40,24 @@ fn main() {
                     event.window().hide().unwrap();
                     api.prevent_close();
                 }
-                // When window gets focus (e.g., clicking Dock icon), show it
-                WindowEvent::Focused(focused) => {
-                    if *focused {
-                        let _ = event.window().show();
-                    }
-                }
                 _ => {}
             }
         })
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("error while running tauri application");
+
+    // Use RunEvent to handle Dock click on macOS
+    app.run(|app_handle, event| {
+        match event {
+            // Resumed is triggered when the app is brought to foreground
+            // This includes clicking on the Dock icon
+            RunEvent::Resumed => {
+                if let Some(window) = app_handle.get_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            _ => {}
+        }
+    });
 }
