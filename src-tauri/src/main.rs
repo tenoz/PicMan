@@ -23,7 +23,6 @@ fn main() {
         .on_menu_event(|event| {
             match event.menu_item_id() {
                 "quit" => {
-                    // Emit event to frontend to check for pending tasks
                     let window = event.window();
                     window.emit("app-exit-requested", ()).unwrap();
                 }
@@ -38,24 +37,18 @@ fn main() {
         })
         .on_window_event(|event| {
             match event.event() {
-                // Close button clicked - hide window
                 WindowEvent::CloseRequested { api, .. } => {
                     event.window().hide().unwrap();
                     api.prevent_close();
                 }
+                // When window gets focus (e.g., clicking Dock icon), show it
+                WindowEvent::Focused(focused) => {
+                    if *focused {
+                        let _ = event.window().show();
+                    }
+                }
                 _ => {}
             }
-        })
-        .setup(|app| {
-            // Get window reference for later use
-            let window = app.get_window("main").unwrap();
-            
-            // Handle application activation (clicking on Dock icon)
-            app.listen_global("tauri://activate", move |_event| {
-                let _ = window.show();
-                let _ = window.set_focus();
-            });
-            Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
