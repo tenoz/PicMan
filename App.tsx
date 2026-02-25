@@ -1636,6 +1636,32 @@ function App() {
                      {/* Download Actions */}
                      {stats.success > 0 && !isProcessing && (
                         <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-900/10 p-0.5 rounded-lg border border-blue-100 dark:border-blue-800">
+                            {/* 0. Export Mode Selector */}
+                            <div className="flex items-center gap-0.5 px-1">
+                               <button
+                                  onClick={() => setConfig({...config, exportMode: 'rename'})}
+                                  className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${
+                                     config.exportMode === 'rename' || !config.exportMode
+                                        ? 'bg-white dark:bg-gray-700 text-brand-600 dark:text-brand-400 shadow-sm'
+                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                  }`}
+                                  title="重命名保存：添加后缀避免覆盖原文件"
+                               >
+                                  重命名
+                               </button>
+                               <button
+                                  onClick={() => setConfig({...config, exportMode: 'overwrite'})}
+                                  className={`px-2 py-1 text-[10px] font-medium rounded transition-all ${
+                                     config.exportMode === 'overwrite'
+                                        ? 'bg-white dark:bg-gray-700 text-orange-600 dark:text-orange-400 shadow-sm'
+                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                                  }`}
+                                  title="覆盖保存：直接替换原文件"
+                               >
+                                  覆盖
+                               </button>
+                            </div>
+
                            {/* 1. Download Individual */}
                            <button
                               onClick={() => handleDownloadAll(true)}
