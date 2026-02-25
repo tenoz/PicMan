@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{WindowEvent, RunEvent, CustomMenuItem, Menu, MenuItem, Submenu, Manager};
+use tauri::{WindowEvent, CustomMenuItem, Menu, MenuItem, Submenu, Manager};
 
 fn main() {
     // Create menu with Quit item that has accelerator
@@ -18,7 +18,7 @@ fn main() {
 
     let menu = Menu::new().add_submenu(Submenu::new("PicMan", app_menu));
 
-    let app = tauri::Builder::default()
+    tauri::Builder::default()
         .menu(menu)
         .on_menu_event(|event| {
             match event.menu_item_id() {
@@ -26,7 +26,6 @@ fn main() {
                     // Emit event to frontend to check for pending tasks
                     let window = event.window();
                     window.emit("app-exit-requested", ()).unwrap();
-                    // Don't exit immediately - let frontend decide
                 }
                 "hide" => {
                     event.window().hide().unwrap();
@@ -47,10 +46,17 @@ fn main() {
                 _ => {}
             }
         })
-        .build(tauri::generate_context!())
+        .setup(|app| {
+            // Get window reference for later use
+            let window = app.get_window("main").unwrap();
+            
+            // Handle application activation (clicking on Dock icon)
+            app.listen_global("tauri://activate", move |_event| {
+                let _ = window.show();
+                let _ = window.set_focus();
+            });
+            Ok(())
+        })
+        .run(tauri::generate_context!())
         .expect("error while running tauri application");
-
-    app.run(|_app_handle, _event| {
-        // RunEvent handling if needed
-    });
 }

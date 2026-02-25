@@ -177,15 +177,19 @@ function App() {
       const tauri = window.__TAURI__;
       if (!tauri?.event) return;
 
-      const { listen, emit } = tauri.event;
+      const { listen } = tauri.event;
+      const { confirm } = tauri.dialog;
       
       // Listen for exit request from Tauri backend
       const unlisten = await listen('app-exit-requested', async () => {
         if (hasPendingTasks) {
-          const confirmed = confirm('您有未完成的任务：\n\n' +
-            '- 部分文件尚未转换\n' +
-            '- 部分文件尚未导出\n\n' +
-            '确定要退出应用吗？');
+          // Use Tauri's dialog API instead of browser confirm
+          const confirmed = await confirm('您有未完成的任务：\n\n' +
+            '• 部分文件尚未转换\n' +
+            '• 部分文件尚未导出\n\n' +
+            '确定要退出应用吗？', 
+            { title: '确认退出', type: 'warning' }
+          );
           
           if (confirmed) {
             // User confirmed exit - actually exit the app
