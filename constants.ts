@@ -3,7 +3,7 @@ import { ProcessingConfig, WatermarkConfig, ChangelogItem } from './types';
 
 export const APP_INFO = {
   name: '图片侠 PicMan',
-  version: 'v1.1.0',
+  version: 'v1.2.0',
   description: '一款强大的、离线优先的批量图片处理工具，支持在浏览器内进行格式转换、压缩、调整大小和添加水印。',
   features: [
     '批量格式转换 (JPG, PNG, WebP)',
@@ -26,6 +26,14 @@ export const APP_INFO = {
 };
 
 export const CHANGELOG: ChangelogItem[] = [
+  {
+    version: 'v1.2.0',
+    date: '2026-02-25',
+    changes: [
+      { type: 'feat', content: '增加批量文件导出功能，支持重命名或直接覆盖' },
+      { type: 'opt', content: '窗口关闭等行为优化' }
+    ]
+  },
   {
     version: 'v1.1.0',
     date: '2024-05-23',

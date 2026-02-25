@@ -1,9 +1,9 @@
 {
-  "active_plan": "/Users/pxdog/Project/PicMan/.sisyphus/plans/git-reinitialize.md",
-  "started_at": "2026-02-24T09:01:08.260Z",
+  "active_plan": "/Users/pxdog/Project/PicMan/.sisyphus/plans/picman-v1.2.0-release.md",
+  "started_at": "2026-02-25T05:57:55.343Z",
   "session_ids": [
-    "ses_3712aeacbffe4FvMXhpZQTJITI"
+    "ses_36d28543affenzxZ9Neb12k1jy"
   ],
-  "plan_name": "git-reinitialize",
+  "plan_name": "picman-v1.2.0-release",
   "agent": "atlas"
 }
