@@ -1,23 +1,21 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use tauri::{WindowEvent, RunEvent, CustomMenuItem, Menu, MenuItem, Submenu, Manager};
+use tauri::{WindowEvent, CustomMenuItem, Menu, MenuItem, Submenu, Manager};
 
 fn main() {
     let quit = CustomMenuItem::new("quit", "Quit").accelerator("Command+Q");
-    let hide = CustomMenuItem::new("hide", "Hide").accelerator("Command+H");
-    let close = CustomMenuItem::new("close", "Close").accelerator("Command+W");
+    let close = CustomMenuItem::new("close", "Close Window").accelerator("Command+W");
     
     let app_menu = Menu::new()
         .add_native_item(MenuItem::Separator)
-        .add_item(hide)
         .add_item(close)
         .add_native_item(MenuItem::Separator)
         .add_item(quit);
 
     let menu = Menu::new().add_submenu(Submenu::new("PicMan", app_menu));
 
-    let app = tauri::Builder::default()
+    tauri::Builder::default()
         .menu(menu)
         .on_menu_event(|event| {
             match event.menu_item_id() {
@@ -25,11 +23,8 @@ fn main() {
                     let window = event.window();
                     window.emit("app-exit-requested", ()).unwrap();
                 }
-                "hide" => {
-                    event.window().hide().unwrap();
-                }
                 "close" => {
-                    event.window().hide().unwrap();
+                    event.window().minimize().unwrap();
                 }
                 _ => {}
             }
@@ -37,27 +32,12 @@ fn main() {
         .on_window_event(|event| {
             match event.event() {
                 WindowEvent::CloseRequested { api, .. } => {
-                    event.window().hide().unwrap();
+                    event.window().minimize().unwrap();
                     api.prevent_close();
                 }
                 _ => {}
             }
         })
-        .build(tauri::generate_context!())
+        .run(tauri::generate_context!())
         .expect("error while running tauri application");
-
-    // Use RunEvent to handle Dock click on macOS
-    app.run(|app_handle, event| {
-        match event {
-            // Resumed is triggered when the app is brought to foreground
-            // This includes clicking on the Dock icon
-            RunEvent::Resumed => {
-                if let Some(window) = app_handle.get_window("main") {
-                    let _ = window.show();
-                    let _ = window.set_focus();
-                }
-            }
-            _ => {}
-        }
-    });
 }
