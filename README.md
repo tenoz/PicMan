@@ -53,6 +53,20 @@ No installation required. Simply open in your browser.
 
 ### 方式二：桌面应用 | Method 2: Desktop App
 
+基于 Tauri 构建的桌面应用，支持 macOS（Apple Silicon 和 Intel）、Windows、Linux。
+
+Desktop app built with Tauri, supporting macOS (Apple Silicon & Intel), Windows, and Linux.
+
+**下载预构建版本 | Download Pre-built Versions:**
+
+请前往 [Releases](https://github.com/yourusername/picman/releases) 页面下载对应架构的 DMG：
+- `PicMan_*_aarch64.dmg` - Apple Silicon Mac (M1/M2/M3)
+- `PicMan_*_x64.dmg` - Intel Mac
+
+Please visit the [Releases](https://github.com/yourusername/picman/releases) page to download the DMG for your architecture:
+- `PicMan_*_aarch64.dmg` - Apple Silicon Mac (M1/M2/M3)
+- `PicMan_*_x64.dmg` - Intel Mac
+
 基于 Tauri 构建的桌面应用，支持 macOS、Windows、Linux。
 
 Desktop app built with Tauri, supporting macOS, Windows, and Linux.
@@ -71,7 +85,25 @@ npm run dev
 # 构建桌面应用 | Build desktop app
 npm run tauri:build
 
-# 构建并打包 macOS DMG (Apple Silicon)
+# 构建 macOS DMG (Apple Silicon)
+npm run bundle
+
+# 构建 macOS DMG (Intel Mac)
+npm run bundle:x64
+
+# 同时构建两个架构
+npm run bundle:all
+```
+
+**架构说明 | Architecture Notes:**
+
+构建脚本会自动根据目标架构输出到对应目录：
+- Apple Silicon: `src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/`
+- Intel: `src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/`
+
+The build scripts automatically output to architecture-specific directories:
+- Apple Silicon: `src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/`
+- Intel: `src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/`
 npm run bundle
 ```
 

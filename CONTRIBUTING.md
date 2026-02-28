@@ -27,7 +27,34 @@ npm install
 # Run development server | 运行开发服务器
 npm run dev
 
-# Build desktop app | 构建桌面应用
+# Build desktop app (default: Apple Silicon)
+npm run tauri:build
+
+# Build for specific architecture | 构建特定架构
+npm run bundle        # Apple Silicon (aarch64)
+npm run bundle:x64    # Intel (x86_64)
+npm run bundle:all    # Both architectures | 两个架构
+```
+
+### Architecture Targets | 架构目标
+
+本项目支持 macOS 双架构构建：
+- **Apple Silicon (aarch64-apple-darwin)**: M1/M2/M3 Mac
+- **Intel (x86_64-apple-darwin)**: Intel Mac
+
+首次构建 x64 版本前，请确保安装了对应的 Rust target：
+```bash
+rustup target add x86_64-apple-darwin
+```
+
+This project supports dual-architecture builds for macOS:
+- **Apple Silicon (aarch64-apple-darwin)**: M1/M2/M3 Mac
+- **Intel (x86_64-apple-darwin)**: Intel Mac
+
+Before building for x64 for the first time, ensure the Rust target is installed:
+```bash
+rustup target add x86_64-apple-darwin
+```
 npm run tauri:build
 ```
 

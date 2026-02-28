@@ -9,7 +9,7 @@ import { DEFAULT_CONFIG, MAX_FILE_SIZE_MB, SUGGESTED_BATCH_LIMIT, PRESETS, APP_I
 import { processImage } from './services/imageProcessor';
 import { generateId, loadFromStorage, saveToStorage, formatBytes, getStorageSize, saveFile, generateDummyImage, getWebGLMaxTextureSize, checkIsAnimated, createStaticThumbnail } from './utils';
 import JSZip from 'jszip';
-import { Moon, Sun, Play, Pause, Download, Trash2, RefreshCcw, AlertOctagon, X, Info, Eye, Database, Plus, ChevronDown, Check, FolderInput, FilePlus, Archive, Layers, Folder, Command, Package, Loader2, Zap, Cpu, Aperture, ScrollText, History, Sparkles, Wrench, Bug, FlaskConical, MonitorSmartphone, MemoryStick } from 'lucide-react';
+import { Moon, Sun, Play, Pause, Download, Trash2, RefreshCcw, AlertOctagon, X, Info, Eye, Database, Plus, ChevronDown, Check, FolderInput, FilePlus, Archive, Layers, Folder, Command, Package, Loader2, Zap, Cpu, Aperture, ScrollText, History, Sparkles, Wrench, Bug, FlaskConical, MonitorSmartphone, MemoryStick, Square } from 'lucide-react';
 
 export type SortOption = 'time_desc' | 'time_asc' | 'name_asc' | 'name_desc' | 'size_asc' | 'size_desc' | 'type_asc' | 'type_desc';
 
@@ -48,6 +48,12 @@ function App() {
   const [isZipping, setIsZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
 
+  // Download State
+  const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
+  const [downloadedFiles, setDownloadedFiles] = useState<string[]>([]);
+  const [failedFiles, setFailedFiles] = useState<string[]>([]);
+
   const [notification, setNotification] = useState<{msg: string, type: 'success' | 'error'} | null>(null);
   const [skippedFiles, setSkippedFiles] = useState<{name: string, reason: string}[]>([]);
   
@@ -65,6 +71,8 @@ function App() {
 
   // Processing Control Refs
   const stopProcessingRef = useRef(false);
+  const stopDownloadRef = useRef(false);
+  const stopZipRef = useRef(false);
   
   // Preview State
   const [previewFile, setPreviewFile] = useState<AppFile | null>(null);
@@ -974,81 +982,122 @@ function App() {
     
     addLog(`开始导出到目录: ${exportDir}`, 'info', `模式: ${config.exportMode || 'rename'}`);
 
-    setIsZipping(true);
+    setIsDownloadingAll(true);
+    setDownloadProgress({ current: 0, total: successFiles.length });
+    setFailedFiles([]);
     let exportedCount = 0;
     let overwrittenCount = 0;
     let errorCount = 0;
     let skippedCount = 0;
 
     try {
-      for (const file of successFiles) {
-        if (!file.processedBlob) continue;
+      const total = successFiles.length;
+      
+      // 批量进度更新
+      let lastProgressUpdate = 0;
+      let progressUpdateCount = 0;
+      const updateProgress = (current: number) => {
+        progressUpdateCount++;
+        const now = Date.now();
+        if (progressUpdateCount >= 5 || now - lastProgressUpdate >= 100) {
+          setDownloadProgress({ current, total });
+          lastProgressUpdate = now;
+          progressUpdateCount = 0;
+        }
+      };
 
-        const mime = file.processedBlob.type;
-        const ext = getExtensionFromMime(mime);
-        const originalName = file.file.name;
-        const namePart = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-        
-        let relativePath: string;
-        
-        if (config.exportMode === 'overwrite') {
-          // 保持原始文件名
-          relativePath = file.file.webkitRelativePath || originalName;
-        } else {
-          // 添加后缀
-          const suffix = config.filenameSuffix || '_processed';
-          const newName = `${namePart}${suffix}.${ext}`;
-          
-          if (file.file.webkitRelativePath) {
-            const dir = file.file.webkitRelativePath.substring(0, file.file.webkitRelativePath.lastIndexOf('/'));
-            relativePath = await path.join(dir, newName);
-          } else {
-            relativePath = newName;
-          }
+      // 分批并行处理：每批5个文件
+      const BATCH_SIZE = 5;
+      for (let i = 0; i < successFiles.length; i += BATCH_SIZE) {
+        if (stopDownloadRef.current) {
+          addLog('用户取消下载', 'warn');
+          break;
         }
 
-        // 构建完整目标路径
-        const targetPath = await path.join(exportDir, relativePath);
+        const batch = successFiles.slice(i, i + BATCH_SIZE);
+        
+        // 并行处理当前批次
+        await Promise.all(batch.map(async (file, batchIndex) => {
+          const fileIndex = i + batchIndex;
+          if (!file.processedBlob) return;
 
-        try {
-          // 检查是否为覆盖模式且文件已存在
+          updateProgress(fileIndex + 1);
+
+          const mime = file.processedBlob.type;
+          const ext = getExtensionFromMime(mime);
+          const originalName = file.file.name;
+          const namePart = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+
+          let relativePath: string;
+
           if (config.exportMode === 'overwrite') {
-            try {
-              await fs.readBinaryFile(targetPath);
-              overwrittenCount++;
-            } catch {
-              // 文件不存在，正常情况
+            // 保持原始文件名
+            relativePath = file.file.webkitRelativePath || originalName;
+          } else {
+            // 添加后缀
+            const suffix = config.filenameSuffix || '_processed';
+            const newName = `${namePart}${suffix}.${ext}`;
+
+            if (file.file.webkitRelativePath) {
+              const dir = file.file.webkitRelativePath.substring(0, file.file.webkitRelativePath.lastIndexOf('/'));
+              relativePath = `${dir}/${newName}`;
+            } else {
+              relativePath = newName;
             }
           }
 
-          const arrayBuffer = await file.processedBlob.arrayBuffer();
-          const uint8Array = new Uint8Array(arrayBuffer);
-          await fs.writeBinaryFile(targetPath, uint8Array);
-          
-          exportedCount++;
-        } catch (err: any) {
-          console.error(`导出失败: ${targetPath}`, err);
-          errorCount++;
-        }
+          // 构建完整目标路径
+          const targetPath = `${exportDir}/${relativePath}`;
+
+          try {
+            // 检查是否为覆盖模式且文件已存在（使用轻量级方法）
+            if (config.exportMode === 'overwrite') {
+              try {
+                // 尝试获取文件信息，而不是读取整个文件
+                await fs.metadata(targetPath);
+                overwrittenCount++;
+              } catch {
+                // 文件不存在，正常情况
+              }
+            }
+
+            // 读取 Blob 数据
+            const arrayBuffer = await file.processedBlob.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+
+            await fs.writeBinaryFile(targetPath, uint8Array);
+            exportedCount++;
+          } catch (err: any) {
+            console.error(`导出失败: ${targetPath}`, err);
+            errorCount++;
+            setFailedFiles(prev => [...prev, file.file.name]);
+          }
+        }));
+      }
+
+      // 确保最终进度更新
+      setDownloadProgress({ current: total, total });
+      
+      // 失败文件简报
+      const failedCount = failedFiles.length;
+      if (failedCount > 0) {
+        addLog(`导出失败文件列表 (${failedCount}个):`, 'error', failedFiles.join('\n'));
       }
 
       let msg = `自动导出完成: ${exportedCount}个成功`;
       if (errorCount > 0) msg += `, ${errorCount}个失败`;
       if (config.exportMode === 'overwrite' && overwrittenCount > 0) msg += ` (${overwrittenCount}个已覆盖)`;
       
-      showNotification(msg, errorCount > 0 ? 'warn' : 'success');
+      showNotification(msg, errorCount > 0 ? 'error' : 'success');
       addLog(msg, errorCount > 0 ? 'warn' : 'success', `导出目录: ${exportDir}`);
     } catch (err: any) {
       console.error('自动导出失败', err);
       showNotification('自动导出失败', 'error');
       addLog('自动导出失败', 'error', err.message);
     } finally {
-      setIsZipping(false);
+      setIsDownloadingAll(false);
     }
   };
-
-
-
 
 
   const handleExportZip = async () => {
@@ -1062,34 +1111,60 @@ function App() {
     setZipProgress(0);
     const zipStart = Date.now();
     addLog(`开始打包导出 ${successFiles.length} 个文件...`, 'info', 'ZIP导出');
+    
+    // 重置失败文件列表
+    setFailedFiles([]);
 
     try {
       const zip = new JSZip();
+      const failedFileNames: string[] = [];
       
-      successFiles.forEach(f => {
-        const mime = f.processedBlob!.type;
-        const ext = getExtensionFromMime(mime);
-        const originalName = f.file.name;
-        const namePart = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
-        const suffix = config.filenameSuffix || '';
-        const fileName = `${namePart}${suffix}.${ext}`;
-        
-        // 保持目录结构
-        let zipPath = fileName;
-        if (f.file.webkitRelativePath) {
-          const dir = f.file.webkitRelativePath.substring(0, f.file.webkitRelativePath.lastIndexOf('/'));
-          zipPath = `${dir}/${fileName}`;
+      // 批量异步添加文件到 ZIP，避免阻塞 UI
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < successFiles.length; i += BATCH_SIZE) {
+        if (stopZipRef.current) {
+          throw new Error('用户取消了打包');
         }
         
-        zip.file(zipPath, f.processedBlob!);
-      });
-
+        const batch = successFiles.slice(i, i + BATCH_SIZE);
+        await Promise.all(batch.map(async (f) => {
+          try {
+            const mime = f.processedBlob!.type;
+            const ext = getExtensionFromMime(mime);
+            const originalName = f.file.name;
+            const namePart = originalName.substring(0, originalName.lastIndexOf('.')) || originalName;
+            const suffix = config.filenameSuffix || '';
+            const fileName = `${namePart}${suffix}.${ext}`;
+            
+            // 保持目录结构
+            let zipPath = fileName;
+            if (f.file.webkitRelativePath) {
+              const dir = f.file.webkitRelativePath.substring(0, f.file.webkitRelativePath.lastIndexOf('/'));
+              zipPath = `${dir}/${fileName}`;
+            }
+            
+            zip.file(zipPath, f.processedBlob!);
+          } catch (err) {
+            console.error(`添加文件到ZIP失败: ${f.file.name}`, err);
+            failedFileNames.push(f.file.name);
+            setFailedFiles(prev => [...prev, f.file.name]);
+          }
+        }));
+        
+        // 让出主线程，避免阻塞
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+      
+      // 使用最低压缩级别以提升速度
       const content = await zip.generateAsync({
         type: "blob",
         compression: "DEFLATE",
-        compressionOptions: { level: 5 }
+        compressionOptions: { level: 1 }
       }, (metadata) => {
         setZipProgress(metadata.percent);
+        if (stopZipRef.current) {
+          throw new Error('用户取消了打包');
+        }
       });
 
       const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -1099,14 +1174,16 @@ function App() {
       const lastDir = loadFromStorage('lastExportDir', '');
       
       const success = await saveFile(content, zipName, lastDir);
-      
       const zipDuration = Date.now() - zipStart;
-      if (success) {
+      
+      // 失败文件简报
+      if (failedFileNames.length > 0) {
+        addLog(`打包失败文件列表 (${failedFileNames.length}个):`, 'error', failedFileNames.join('\n'));
+        showNotification(`打包完成，${failedFileNames.length}个文件失败`, 'error');
+      } else if (success) {
         // 保存这次选择的目录（这里简化处理，实际需要从Tauri返回路径）
         showNotification(`打包导出完成`, 'success');
-        addLog("打包导出成功", "success", `文件名: ${zipName}
-大小: ${formatBytes(content.size)}
-耗时: ${zipDuration}ms`);
+        addLog("打包导出成功", "success", `文件名: ${zipName}\n大小: ${formatBytes(content.size)}\n耗时: ${zipDuration}ms`);
       } else {
         addLog("用户取消了保存", "warn", `耗时: ${zipDuration}ms`);
       }
@@ -1536,18 +1613,20 @@ function App() {
         </div>
         
         <div className="flex items-center gap-3">
-           {(isProcessing || isPaused || isZipping || isImporting) && (
+           {(isProcessing || isPaused || isZipping || isImporting || isDownloadingAll) && (
              <div className="flex items-center gap-3 mr-4 bg-gray-50 dark:bg-gray-800/50 px-3 py-1.5 rounded-full border border-gray-100 dark:border-gray-700/50">
                 <div className="flex items-center gap-2 mr-2 text-xs font-medium text-gray-500 dark:text-gray-400 border-r border-gray-200 dark:border-gray-600 pr-3">
-                    {isImporting ? <FolderInput size={14} className="text-sky-500" /> : 
-                     isZipping ? <Package size={14} className="text-purple-500" /> : 
-                     <Play size={14} className={isPaused ? "text-amber-500" : "text-brand-500"} />}
-                    
-                    <span>{isImporting ? '导入中...' : (isZipping ? '正在打包...' : (isPaused ? '已暂停' : '处理中...'))}</span>
+                    {isDownloadingAll ? <Download size={14} className="text-emerald-500" /> :
+                     isZipping ? <Package size={14} className="text-purple-500" /> :
+                     isImporting ? <FolderInput size={14} className="text-sky-500" /> :
+                     <Play size={14} className="text-brand-500" />}
+                    <span>{isDownloadingAll ? `正在下载 ${downloadProgress.current}/${downloadProgress.total}` : (isImporting ? '导入中...' : (isZipping ? '正在打包...' : (isPaused ? '已暂停' : '处理中...')))}</span>
                 </div>
                 <div className="w-32 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                    <div 
                       className={`h-full transition-all duration-300 relative overflow-hidden ${
+                          isDownloadingAll ? 'bg-emerald-500' :
+                          isImporting ? 'bg-sky-500' :
                           isImporting ? 'bg-sky-500' :
                           isZipping 
                            ? 'bg-purple-500' 
@@ -1555,18 +1634,37 @@ function App() {
                              ? 'bg-amber-400' 
                              : 'bg-brand-500'
                       }`}
-                      style={{ width: `${isImporting ? importProgress : (isZipping ? zipProgress : processingProgress)}%` }}
+                      style={{ width: `${isDownloadingAll ? Math.round((downloadProgress.current / downloadProgress.total) * 100) : (isImporting ? importProgress : (isZipping ? zipProgress : processingProgress))}%` }}
                    >
                      {!isPaused && <div className="absolute inset-0 bg-white/30 w-full animate-[shimmer_1s_infinite] -translate-x-full"></div>}
                    </div>
                 </div>
                 <span className={`text-xs font-mono font-medium w-8 text-right ${
+                    isDownloadingAll ? 'text-emerald-600 dark:text-emerald-400' :
+                    isImporting ? 'text-sky-600 dark:text-sky-400' :
                     isImporting ? 'text-sky-600 dark:text-sky-400' :
                     isZipping ? 'text-purple-600 dark:text-purple-400' : 
                     'text-brand-600 dark:text-brand-400'
                 }`}>
-                    {Math.round(isImporting ? importProgress : (isZipping ? zipProgress : processingProgress))}%
+                    {Math.round(isDownloadingAll ? (downloadProgress.current / downloadProgress.total) * 100 : (isImporting ? importProgress : (isZipping ? zipProgress : processingProgress)))}%
                 </span>
+                
+                {/* 中断下载/打包按钮 */}
+                {(isDownloadingAll || isZipping) && (
+                  <button
+                    onClick={() => {
+                      if (isDownloadingAll) {
+                        stopDownloadRef.current = true;
+                      } else if (isZipping) {
+                        stopZipRef.current = true;
+                      }
+                    }}
+                    className="ml-2 p-1.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                    title={isDownloadingAll ? '中断下载' : '中断打包'}
+                  >
+                    <Square size={14} fill="currentColor" />
+                  </button>
+                )}
              </div>
            )}
            

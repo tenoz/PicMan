@@ -1,0 +1,80 @@
+任务 #9: Web Worker 图片处理核心脚本 - 验证报告
+==================================================
+
+## 文件信息
+
+- **创建文件**: src/workers/imageProcessor.worker.ts
+- **创建时间**: 2026-02-28
+- **代码行数**: 577 行
+
+## 实现功能清单
+
+### ✅ 1. 导入依赖
+- [x] piexifjs (EXIF 处理)
+- [x] Worker 类型定义 (types.ts)
+- [x] ProcessingConfig 类型
+
+### ✅ 2. 消息处理循环
+- [x] 监听 message 事件
+- [x] PROCESS_IMAGE: 处理图片
+- [x] CANCEL: 取消处理
+- [x] PING: 心跳响应
+
+### ✅ 3. 图片处理函数
+- [x] 接收 ProcessImagePayload
+- [x] 创建 OffscreenCanvas
+- [x] 使用 ImageBitmap 加载图片
+- [x] 应用处理 (尺寸调整、旋转、水印等)
+- [x] 使用 convertToBlob 导出
+- [x] 保留 EXIF (如果配置了)
+- [x] 发送进度更新 (0-100%)
+
+### ✅ 4. 进度回调
+- [x] 阶段划分: loading (0-20%), processing (20-60%), watermark (60-80%), encoding (80-100%)
+- [x] 实时进度消息推送
+
+### ✅ 5. 错误处理
+- [x] try-catch 包裹处理逻辑
+- [x] 发送错误响应
+- [x] 取消任务处理
+
+### ✅ 6. 高级功能
+- [x] 智能体积兜底 (preventSizeInflation)
+- [x] 水印支持 (文字 + 图片)
+- [x] EXIF 保留 (JPEG 格式)
+- [x] 旋转、翻转支持
+
+## 架构特点
+
+1. **纯 Worker 环境**: 不使用任何 DOM API
+2. **OffscreenCanvas**: 使用离屏画布进行渲染
+3. **ImageBitmap**: 高效图片解码
+4. **资源清理**: 主动调用 close() 释放 ImageBitmap
+5. **类型安全**: 完整的 TypeScript 类型支持
+
+## 与原有 imageProcessor.ts 的对应关系
+
+| 原功能 | Worker 实现 |
+|--------|------------|
+| HTMLImageElement | ImageBitmap |
+| HTMLCanvasElement | OffscreenCanvas |
+| canvas.toBlob() | canvas.convertToBlob() |
+| FileReader (原图) | ArrayBuffer 直接传递 |
+| document.createElement('canvas') | new OffscreenCanvas() |
+
+## API 兼容性
+
+- ✅ OffscreenCanvas: 现代浏览器支持
+- ✅ ImageBitmap: 现代浏览器支持
+- ✅ createImageBitmap(): 现代浏览器支持
+- ✅ piexifjs: 验证兼容 Worker 环境
+
+## 待集成项
+
+1. Worker 实例化 (在主线程中)
+2. WorkerPool 管理
+3. 与 ProcessingManager 集成
+
+## 结论
+
+Worker 核心脚本已创建完成，具备完整的图片处理能力，支持进度反馈和取消操作。

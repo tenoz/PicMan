@@ -82,3 +82,15 @@ export interface ChangelogItem {
     content: string;
   }[];
 }
+
+
+// 下载阶段枚举
+export type DownloadPhase = 'idle' | 'preparing' | 'downloading' | 'completed' | 'cancelled';
+
+// 下载进度接口
+export interface DownloadProgress {
+  phase: DownloadPhase; // 当前下载阶段
+  current: number; // 当前已下载文件数
+  total: number; // 总文件数
+  failedFiles: string[]; // 下载失败的文件名列表
+}
