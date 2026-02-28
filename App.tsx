@@ -7,8 +7,13 @@ import { LogViewer } from './components/LogViewer';
 import { AppFile, ProcessingConfig, ProcessingReport, OutputFormat, LogEntry, LogLevel } from './types';
 import { DEFAULT_CONFIG, MAX_FILE_SIZE_MB, SUGGESTED_BATCH_LIMIT, PRESETS, APP_INFO, CHANGELOG } from './constants';
 import { processImage } from './services/imageProcessor';
-import { generateId, loadFromStorage, saveToStorage, formatBytes, getStorageSize, saveFile, generateDummyImage, getWebGLMaxTextureSize, checkIsAnimated, createStaticThumbnail } from './utils';
+import { generateThumbnail } from './utils/thumbnailGenerator';
+import { blobManager } from './utils/blobManager';
 import JSZip from 'jszip';
+import { LRUCache } from './src/utils/lruCache';
+import { useWorkerProcessor } from './hooks/useWorkerProcessor';
+import { TaskScheduler } from './utils/taskScheduler';
+import type { WorkerProgress, WorkerResponseData } from './workers/types';
 import { Moon, Sun, Play, Pause, Download, Trash2, RefreshCcw, AlertOctagon, X, Info, Eye, Database, Plus, ChevronDown, Check, FolderInput, FilePlus, Archive, Layers, Folder, Command, Package, Loader2, Zap, Cpu, Aperture, ScrollText, History, Sparkles, Wrench, Bug, FlaskConical, MonitorSmartphone, MemoryStick, Square } from 'lucide-react';
 
 export type SortOption = 'time_desc' | 'time_asc' | 'name_asc' | 'name_desc' | 'size_asc' | 'size_desc' | 'type_asc' | 'type_desc';
@@ -69,6 +74,22 @@ function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [showLogs, setShowLogs] = useState(false);
 
+  // LRU Cache for processedBlob management
+  const processedBlobCache = useRef(new LRUCache<string, Blob>({
+    maxSize: 50, // 最多缓存 50 个 processedBlob
+    onEvict: (fileId, blob) => {
+      // 淘汰时释放 Blob URL
+      console.log(`[LRUCache] 淘汰文件: ${fileId}, 释放 Blob URL`);
+      // 清理文件状态中的 processedBlob 引用
+      setFiles(prev => prev.map(f => {
+        if (f.id === fileId) {
+          return { ...f, processedBlob: undefined };
+        }
+        return f;
+      }));
+    }
+  }));
+
   // Processing Control Refs
   const stopProcessingRef = useRef(false);
   const stopDownloadRef = useRef(false);
@@ -83,6 +104,12 @@ function App() {
   // Hidden Input Refs
   const addFilesInputRef = useRef<HTMLInputElement>(null);
   const addFolderInputRef = useRef<HTMLInputElement>(null);
+
+  // 初始化 Worker 处理器
+  const { processImage: processImageWithWorker, cancelTask, isWorkerSupported } = useWorkerProcessor();
+
+  // 任务调度器 ref
+  const schedulerRef = useRef<TaskScheduler | null>(null);
 
   // --- Effects ---
   useEffect(() => {
@@ -818,92 +845,259 @@ function App() {
   // Add specific handler for processing a subset of files (e.g. from a folder tab)
   const handleProcessFiles = async (filesToProcess: AppFile[]) => {
     if (isProcessing) return;
-    
-    // Reset stop flag
-    stopProcessingRef.current = false;
-    
-    // Determine what to process within this scope
-    // Prioritize non-success items. If all are success, re-process all.
-    let queue = filesToProcess.filter(f => f.status !== 'success');
-    
-    if (queue.length === 0 && filesToProcess.length > 0) {
-       queue = [...filesToProcess];
-    }
 
+    // 确定要处理的文件队列
+    let queue = filesToProcess.filter(f => f.status !== 'success');
+    if (queue.length === 0 && filesToProcess.length > 0) {
+      queue = [...filesToProcess];
+    }
     if (queue.length === 0) return;
 
     setIsProcessing(true);
     setIsPaused(false);
     setProcessingProgress(0);
+    stopProcessingRef.current = false;
+
     addLog(
-        `开始处理任务`, 
-        'info', 
-        `文件数: ${queue.length}\n` +
-        `并发数: ${config.concurrency || 1}\n` +
-        `全局配置: ${config.format}, Q=${config.quality}`
+      `开始处理任务`,
+      'info',
+      `文件数: ${queue.length}\n` +
+      `并发数: ${config.concurrency || 1}\n` +
+      `Worker支持: ${isWorkerSupported ? '是' : '否'}\n` +
+      `全局配置: ${config.format}, Q=${config.quality}`
     );
-    
+
     const total = queue.length;
     let completed = 0;
+    let hasPaused = false;
 
-    // Check concurrency setting
-    const concurrency = config.concurrency || 1;
+    // 创建任务调度器
+    schedulerRef.current = new TaskScheduler({
+      concurrency: config.concurrency || 1,
+      maxConcurrency: (config.concurrency || 1) * 2,
+      minConcurrency: 1,
+      autoAdjust: true,
+      debug: false,
+      onTaskComplete: (task, result) => {
+        completed++;
+        setProcessingProgress(Math.min((completed / total) * 100, 100));
+      },
+      onTaskError: (task, error) => {
+        completed++;
+        setProcessingProgress(Math.min((completed / total) * 100, 100));
+        console.error('[TaskScheduler] 任务失败:', error);
+      },
+      onAllComplete: () => {
+        setIsProcessing(false);
+        if (hasPaused) {
+          setIsPaused(true);
+          showNotification("处理已暂停", 'success');
+          addLog("用户手动暂停了处理任务", "warn");
+        } else {
+          setIsPaused(false);
+          showNotification("处理完成！", 'success');
+          addLog("所有任务处理完成", "success");
+        }
+        // 清理调度器
+        schedulerRef.current?.destroy();
+        schedulerRef.current = null;
+      },
+      onProgress: (completed, total) => {
+        // 进度在 onTaskComplete 中更新
+      },
+    });
 
-    const processedFiles: AppFile[] = [];
-    
-    if (concurrency === 1) {
-        // Sequential Processing
-        for (const file of queue) {
-            if (stopProcessingRef.current) break;
-            const result = await processSingleFileInternal(file);
-            if (result) processedFiles.push(result);
-            completed++;
-            setProcessingProgress((completed / total) * 100);
-        }
-    } else {
-        // Batch Processing (Simple Chunking)
-        // Ensure concurrency is at least 2 if parallel
-        const batchSize = Math.max(2, concurrency);
-        
-        for (let i = 0; i < queue.length; i += batchSize) {
-            if (stopProcessingRef.current) break;
-            const chunk = queue.slice(i, i + batchSize);
-            // Process chunk in parallel
-            const results = await Promise.all(chunk.map(file => processSingleFileInternal(file)));
-            results.forEach(r => { if (r) processedFiles.push(r); });
-            
-            completed += chunk.length;
-            setProcessingProgress(Math.min((completed / total) * 100, 100));
-        }
+    // 为每个文件创建任务
+    for (const fileSnapshot of queue) {
+      if (stopProcessingRef.current) {
+        hasPaused = true;
+        break;
+      }
+
+      schedulerRef.current.addTask({
+        id: fileSnapshot.id,
+        data: fileSnapshot,
+        priority: 'normal',
+        execute: async () => {
+          // 检查是否已暂停
+          if (stopProcessingRef.current) {
+            hasPaused = true;
+            throw new Error('Processing paused by user');
+          }
+
+          const result = await processSingleFileWithWorker(fileSnapshot);
+          return result;
+        },
+      });
     }
 
-    setIsProcessing(false);
-    
-    if (stopProcessingRef.current) {
-        setIsPaused(true);
-        showNotification("处理已暂停", 'success');
-        addLog("用户手动暂停了处理任务", "warn");
-    } else {
-        setIsPaused(false);
-        showNotification("处理完成！", 'success');
-        // 处理完成，用户可以手动选择导出方式
-        addLog("所有任务处理完成", "success");
+    // 启动调度器
+    schedulerRef.current.start();
+  };
+
+  /**
+   * 使用 Worker 处理单个文件
+   */
+  const processSingleFileWithWorker = async (fileSnapshot: AppFile): Promise<AppFile | null> => {
+    const startTime = performance.now();
+    const currentConfig = fileSnapshot.customConfig || config;
+
+    // 1. 标记为处理中
+    setFiles(prev => prev.map(f => {
+      if (f.id === fileSnapshot.id) {
+        return { ...f, status: 'processing', errorMessage: undefined, isSkipped: false };
+      }
+      return f;
+    }));
+
+    try {
+      // --- 动图保护 ---
+      if (fileSnapshot.isAnimated) {
+        const finalBlob = fileSnapshot.file;
+        const processedFile: AppFile = {
+          ...fileSnapshot,
+          processedBlob: finalBlob,
+          processedSize: finalBlob.size,
+          status: 'success',
+          processingTime: performance.now() - startTime,
+          isSkipped: true
+        };
+
+        setFiles(prev => prev.map(f => {
+          if (f.id === fileSnapshot.id) {
+            return processedFile;
+          }
+          return f;
+        }));
+
+        addLog(
+          `跳过动图处理: ${fileSnapshot.file.name}`,
+          'warn',
+          `检测到动态图片 (GIF/Animated WebP)。为保留动效，已跳过压缩与水印处理，直接输出原文件。`
+        );
+        return processedFile;
+      }
+
+      // 使用 Worker 处理图片
+      const result = await processImageWithWorker(
+        fileSnapshot,
+        currentConfig,
+        (progress: WorkerProgress) => {
+          // 可以在这里更新单个文件的进度
+        }
+      );
+
+      // --- 智能体积兜底 ---
+      const isSizeLarger = result.processedSize > fileSnapshot.originalSize;
+      const isFormatChanged = fileSnapshot.file.type !== currentConfig.format;
+      const isResized = currentConfig.resizeMode !== 'original';
+      const isRotated = (currentConfig.rotate || 0) % 360 !== 0;
+      const isFlipped = currentConfig.flipX || currentConfig.flipY;
+      const hasWatermark = currentConfig.watermark.enabled;
+      const hasEdits = isFormatChanged || isResized || isRotated || isFlipped || hasWatermark;
+
+      let finalBlob = result.blob;
+      let finalWidth = result.width;
+      let finalHeight = result.height;
+      let isSkipped = false;
+
+      if ((currentConfig.preventSizeInflation !== false) && isSizeLarger && !hasEdits) {
+        finalBlob = fileSnapshot.file;
+        finalWidth = fileSnapshot.dimensions.width;
+        finalHeight = fileSnapshot.dimensions.height;
+        isSkipped = true;
+      }
+
+      const compressRatio = ((1 - (finalBlob.size / fileSnapshot.originalSize)) * 100).toFixed(1);
+      const timeTaken = (performance.now() - startTime).toFixed(0);
+
+      const processedFile: AppFile = {
+        ...fileSnapshot,
+        processedBlob: finalBlob,
+        processedSize: finalBlob.size,
+        status: 'success',
+        processingTime: performance.now() - startTime,
+        dimensions: { width: finalWidth, height: finalHeight },
+        isSkipped: isSkipped
+      };
+
+      setFiles(prev => prev.map(f => {
+        if (f.id === fileSnapshot.id) {
+          return processedFile;
+        }
+        return f;
+      }));
+
+      if (isSkipped) {
+        addLog(
+          `智能防膨胀: ${fileSnapshot.file.name}`,
+          'warn',
+          `原图: ${formatBytes(fileSnapshot.originalSize)} -> 处理后(弃用): ${formatBytes(result.processedSize)}\n因体积变大且无实质编辑，已自动保留原图。`
+        );
+      } else {
+        addLog(
+          `处理成功: ${fileSnapshot.file.name}`,
+          'info',
+          `Input: ${formatBytes(fileSnapshot.originalSize)}\n` +
+          `Output: ${formatBytes(finalBlob.size)}\n` +
+          `Ratio: ${compressRatio}% reduction\n` +
+          `Time: ${timeTaken}ms\n` +
+          `Config: ${currentConfig.format} Q:${currentConfig.quality}`
+        );
+      }
+
+      return processedFile;
+
+    } catch (err: any) {
+      console.error(err);
+      const errorMsg = err.message || "未知错误";
+
+      addLog(
+        `处理失败: ${fileSnapshot.file.name}`,
+        'error',
+        `Error: ${errorMsg}\n` +
+        `Stack: ${err.stack || 'No stack trace'}\n` +
+        `UserAgent: ${navigator.userAgent}\n` +
+        `Config Snapshot: ${JSON.stringify(currentConfig, null, 2)}`
+      );
+
+      const failedFile: AppFile = {
+        ...fileSnapshot,
+        status: 'error',
+        errorMessage: errorMsg
+      };
+
+      setFiles(prev => prev.map(f => {
+        if (f.id === fileSnapshot.id) {
+          return failedFile;
+        }
+        return f;
+      }));
+
+      return null;
     }
   };
 
   const toggleProcessing = () => {
-      if (isProcessing) {
-          // Trigger stop
-          stopProcessingRef.current = true;
-      } else {
-          // Resume or Start
-          handleBatchProcess();
-      }
+    if (isProcessing) {
+      // 触发暂停
+      stopProcessingRef.current = true;
+      schedulerRef.current?.pause();
+    } else if (isPaused && schedulerRef.current) {
+      // 恢复处理
+      stopProcessingRef.current = false;
+      schedulerRef.current.resume();
+      setIsProcessing(true);
+      setIsPaused(false);
+    } else {
+      // 开始新任务
+      stopProcessingRef.current = false;
+      handleBatchProcess();
+    }
   };
-
   const handleProcessSingle = async (file: AppFile) => {
     if (isProcessing) return;
-    await processSingleFileInternal(file);
+    await processSingleFileWithWorker(file);
   };
 
   const handleDownloadSingle = async (file: AppFile) => {
