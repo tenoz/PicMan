@@ -7,13 +7,13 @@ import { LogViewer } from './components/LogViewer';
 import { AppFile, ProcessingConfig, ProcessingReport, OutputFormat, LogEntry, LogLevel } from './types';
 import { DEFAULT_CONFIG, MAX_FILE_SIZE_MB, SUGGESTED_BATCH_LIMIT, PRESETS, APP_INFO, CHANGELOG } from './constants';
 import { processImage } from './services/imageProcessor';
-import { generateThumbnail } from './utils/thumbnailGenerator';
-import { blobManager } from './utils/blobManager';
-import JSZip from 'jszip';
+import { generateId, loadFromStorage, saveToStorage, formatBytes, getStorageSize, saveFile, generateDummyImage, getWebGLMaxTextureSize, checkIsAnimated, createStaticThumbnail } from './utils';
 import { LRUCache } from './src/utils/lruCache';
-import { useWorkerProcessor } from './hooks/useWorkerProcessor';
-import { TaskScheduler } from './utils/taskScheduler';
-import type { WorkerProgress, WorkerResponseData } from './workers/types';
+import JSZip from 'jszip';
+
+import { useWorkerProcessor } from './src/hooks/useWorkerProcessor';
+import { TaskScheduler } from './src/utils/taskScheduler';
+import type { WorkerProgress, WorkerResponseData } from './src/workers/types';
 import { Moon, Sun, Play, Pause, Download, Trash2, RefreshCcw, AlertOctagon, X, Info, Eye, Database, Plus, ChevronDown, Check, FolderInput, FilePlus, Archive, Layers, Folder, Command, Package, Loader2, Zap, Cpu, Aperture, ScrollText, History, Sparkles, Wrench, Bug, FlaskConical, MonitorSmartphone, MemoryStick, Square } from 'lucide-react';
 
 export type SortOption = 'time_desc' | 'time_asc' | 'name_asc' | 'name_desc' | 'size_asc' | 'size_desc' | 'type_asc' | 'type_desc';
@@ -804,7 +804,15 @@ function App() {
   const handleRemoveFile = (id: string) => {
     setFiles(prev => {
       const target = prev.find(f => f.id === id);
-      if (target) URL.revokeObjectURL(target.previewUrl);
+      if (target) {
+        // 释放预览 URL
+        URL.revokeObjectURL(target.previewUrl);
+        // 从 LRUCache 中删除并释放 processedBlob
+        const processedBlob = processedBlobCache.current.remove(id);
+        if (processedBlob) {
+          console.log(`[Memory] 释放文件 ${id} 的 processedBlob`);
+        }
+      }
       return prev.filter(f => f.id !== id);
     });
     setSelectedIds(prev => {
@@ -814,10 +822,19 @@ function App() {
     });
   };
 
+
   const handleRemoveFiles = (ids: string[]) => {
     setFiles(prev => {
       const toRemove = prev.filter(f => ids.includes(f.id));
-      toRemove.forEach(f => URL.revokeObjectURL(f.previewUrl));
+      toRemove.forEach(f => {
+        // 释放预览 URL
+        URL.revokeObjectURL(f.previewUrl);
+        // 从 LRUCache 中删除并释放 processedBlob
+        const processedBlob = processedBlobCache.current.remove(f.id);
+        if (processedBlob) {
+          console.log(`[Memory] 释放文件 ${f.id} 的 processedBlob`);
+        }
+      });
       return prev.filter(f => !ids.includes(f.id));
     });
     setSelectedIds(prev => {
@@ -834,13 +851,22 @@ function App() {
     
     if (files.length === 0) return;
 
-    files.forEach(f => URL.revokeObjectURL(f.previewUrl));
+    // 释放所有资源
+    files.forEach(f => {
+      URL.revokeObjectURL(f.previewUrl);
+      // 从 LRUCache 中删除
+      processedBlobCache.current.remove(f.id);
+    });
+    // 清空 LRUCache
+    processedBlobCache.current.clear();
+    
     setFiles([]);
     setSelectedIds(new Set());
     setSkippedFiles([]);
     showNotification("列表已清空", 'success');
-    addLog('清空了所有文件列表', 'info');
+    addLog('清空了所有文件列表并释放内存', 'info');
   };
+
 
   // Add specific handler for processing a subset of files (e.g. from a folder tab)
   const handleProcessFiles = async (filesToProcess: AppFile[]) => {

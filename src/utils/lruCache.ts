@@ -242,12 +242,54 @@ export class LRUCache<K, V> {
   }
 
   /**
+   * 手动删除特定键（不从 onEvict 回调）
+   * 用于组件需要主动清理特定条目而不触发淘汰回调的场景
+   *
+   * @param key - 要删除的键
+   * @returns 被删除的值，如果不存在返回 undefined
+   */
+  remove(key: K): V | undefined {
+    const entry = this.cache.get(key);
+    if (entry === undefined) {
+      return undefined;
+    }
+
+    this.cache.delete(key);
+    this.memoryUsage -= entry.size;
+
+    return entry.value;
+  }
+
+  /**
    * 获取缓存的键列表（按访问顺序，从早到晚）
- * 主要用于测试和调试
+   * 主要用于测试和调试
    *
    * @returns 键数组
    */
   keys(): K[] {
+    return Array.from(this.cache.keys());
+  }
+
+  /**
+   * 手动删除特定键（不从 onEvict 回调）
+   * 用于组件需要主动清理特定条目而不触发淘汰回调的场景
+   *
+   * @param key - 要删除的键
+   * @returns 被删除的值，如果不存在返回 undefined
+   */
+  remove(key: K): V | undefined {
+    const entry = this.cache.get(key);
+    if (entry === undefined) {
+      return undefined;
+    }
+
+    this.cache.delete(key);
+    this.memoryUsage -= entry.size;
+
+    return entry.value;
+  }
+
+  /**
     return Array.from(this.cache.keys());
   }
 

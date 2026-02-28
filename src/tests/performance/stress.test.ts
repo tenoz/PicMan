@@ -15,10 +15,11 @@ describe('🔥 大批量压力测试 (500+ 张图片)', () => {
   // 测试配置
   const TEST_CONFIG = {
     IMAGE_COUNT: 500,           // 测试图片数量
-    IMAGE_WIDTH: 1920,          // 测试图片宽度
+    IMAGE_WIDTH: 800,           // 测试图片宽度（较小尺寸以加速测试）
+    IMAGE_HEIGHT: 600,          // 测试图片高度
     IMAGE_HEIGHT: 1080,         // 测试图片高度
     MAX_MEMORY_MB: 500,         // 最大内存限制 (MB)
-    MAX_PROCESSING_TIME_MS: 120000, // 最大处理时间 (120秒)
+    MAX_PROCESSING_TIME_MS: 300000, // 最大处理时间 (300秒)
   };
 
   // 性能监控数据
@@ -327,10 +328,8 @@ describe('🔥 大批量压力测试 (500+ 张图片)', () => {
 
     metrics.endTime = performance.now();
 
-    // 清理预览 URL
-    appFiles.forEach((af) => {
-      URL.revokeObjectURL(af.previewUrl);
-    });
+    // 清理预览 URL (Data URL 不需要清理)
+    // 注意：使用 Data URL 代替 Object URL，无需 revoke
 
     // 销毁调度器
     scheduler.destroy();

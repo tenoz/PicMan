@@ -552,20 +552,35 @@ export class TaskScheduler {
 
   /**
    * 等待所有任务完成
+   * @param timeout 可选的超时时间（毫秒）
+   * @returns Promise，在所有任务完成时 resolve，超时 reject
    */
-  public async waitForComplete(): Promise<void> {
-    return new Promise((resolve) => {
+  public async waitForComplete(timeout?: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let timeoutId: number | undefined;
+      
       const checkComplete = () => {
         const stats = this.getStats();
         if (stats.pending === 0 && stats.running === 0) {
+          if (timeoutId) clearTimeout(timeoutId);
           resolve();
-        } else {
+        } else if (!this.isDestroyed) {
+          // 继续检查，使用 setTimeout 避免阻塞
           setTimeout(checkComplete, 100);
         }
       };
+      
+      // 设置超时
+      if (timeout && timeout > 0) {
+        timeoutId = window.setTimeout(() => {
+          reject(new Error(`等待任务完成超时 (${timeout}ms)`));
+        }, timeout);
+      }
+      
       checkComplete();
     });
   }
+
 
   /**
    * 销毁调度器
