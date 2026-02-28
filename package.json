@@ -7,9 +7,13 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:perf": "vitest run --config vitest.config.ts",
     "tauri:build": "tauri build",
-    "bundle": "npm run build && npx tauri build && open src-tauri/target/release/bundle/dmg/PicMan_1.2.0_aarch64.dmg",
-    "bundle:open": "open src-tauri/target/release/bundle/dmg/PicMan_1.2.0_aarch64.dmg"
+    "bundle": "npm run build && npx tauri build --target aarch64-apple-darwin && open src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/PicMan_1.2.0_aarch64.dmg",
+    "bundle:x64": "npm run build && npx tauri build --target x86_64-apple-darwin && open src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/PicMan_1.2.0_x64.dmg",
+    "bundle:all": "npm run bundle && npm run bundle:x64",
+    "bundle:open": "open src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/PicMan_1.2.0_aarch64.dmg",
+    "bundle:open:x64": "open src-tauri/target/x86_64-apple-darwin/release/bundle/dmg/PicMan_1.2.0_x64.dmg"
   },
   "dependencies": {
     "clsx": "^2.1.1",
@@ -20,6 +24,7 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-dropzone": "^14.4.0",
+    "react-virtuoso": "^4.12.6",
     "sharp": "^0.34.5",
     "tailwind-merge": "^3.4.0",
     "uuid": "^13.0.0"
@@ -28,7 +33,10 @@
     "@tauri-apps/cli": "^1.6.3",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "canvas": "^3.2.1",
+    "jsdom": "^26.1.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.0"
+    "vite": "^6.2.0",
+    "vitest": "^3.2.4"
   }
 }
