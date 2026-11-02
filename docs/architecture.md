@@ -134,6 +134,48 @@ processFiles(queue)
 
 ## 7. 改造方向
 
-短期（P0–P2，见整改计划）：修状态、攒批更新、调度器换队列结构、预生成缩略图、ZIP 改 STORE、LRU 落地。
+**原 P0–P3 已完成**：状态收敛到一个源头、列表攒批更新、ZIP 改 STORE、产物落盘取代 LRU、JPEG / PNG 原生编码可选。
 
-中期（P3）：在 Rust 侧新建 `process_image` command，负责 decode → resize → encode → 直接写盘，前端只保留 UI 与缩略图。这一步能同时解决瓶颈 1、4、5 和 Tauri v1 的 IPC 序列化开销。
+**剩下的**：
+
+- Rust 侧整合 `process_image`（decode → resize → encode → 写盘一条龙）。目前直读只覆盖「无几何编辑」的场景，有旋转/缩放仍要前端出 PNG 中间件。
+- WebP 有损需 libwebp 绑定（`image-webp` 只有无损）。
+- `App.tsx` 拆分：Info Modal 仍是内联。
+- **明确不做的**：预生成缩略图（列表用类型图标是有意为之，那是最早的慢因）、LRU 淘汰（产物已落盘，不需要）。
+
+## 8. 逐文件职责
+
+### 前端
+
+| 文件 | 职责 |
+|---|---|
+| `src/App.tsx` | 主组件（2000+ 行，仍在拆）。状态编排、导入流程、导出入口、各类弹窗 |
+| `components/VirtualFileList.tsx` | 文件列表，虚拟滚动，列表 / 网格双视图 |
+| `components/ProcessingBar.tsx` | 三条进度栏（计数 / 当前文件 / 吞吐 / 剩余 / 完成态） |
+| `components/ConfigPanel.tsx` | 左侧配置面板（预设条 + 五组折叠面板） |
+| `components/NotificationStack.tsx` | 信息提示条：自动消失、常驻告警、最多 3 条 |
+| `components/ThemeSwitch.tsx` | 外观三态切换（跟随系统 / 亮 / 暗） |
+| `components/LogViewer.tsx` | 运行日志弹窗（三分类页签） |
+| `components/ImportZone.tsx` | 拖拽导入区 |
+| `components/ImageTypeBadge.tsx` | 列表左侧文件类型图标（FA path 内联） |
+| `hooks/useProcessing.ts` | 批量处理调度、进度、暂停 / 终止 |
+| `hooks/useExport.ts` | ZIP / 目录导出、进度 |
+| `hooks/useTaskBarDone.ts` | 三条进度栏共用的完成态状态机 |
+| `services/imageProcessor.ts` | Canvas 处理管线：旋转 / 缩放 / 水印 / 编码 / EXIF |
+| `services/nativeBridge.ts` | Tauri 能力探测 + 工作目录 / 日志目录解析 |
+| `services/workspace.ts` | 产物落盘、按需读回、清理历史批次 |
+| `services/rustPng.ts` | PNG → oxipng 重压（失败退回 canvas 产物） |
+| `services/rustJpeg.ts` | JPEG → mozjpeg 编码（PNG 中间件路径） |
+| `services/rustTranscode.ts` | JPEG 直读转码（跳过 canvas，265ms 那条路） |
+| `services/systemZip.ts` | 交给 ditto 打包（硬链接摆放 + 原子写入） |
+| `services/autoLog.ts` | 日志自动落盘（一天一文件，只追加增量） |
+| `utils/` | 调度器、重命名规则、MIME、图片头解析、EXIF 字节、日志文本化、主题、任务栏状态、导入去重 … |
+
+### Rust（`src-tauri/src/`）
+
+| 文件 | 职责 |
+|---|---|
+| `main.rs` | 窗口菜单、关闭即最小化、注册 5 个命令 |
+| `image_ops.rs` | `optimize_png`（oxipng 无损重压） |
+| `jpeg_ops.rs` | `encode_jpeg`（mozjpeg 编码，PNG 进 / JPEG 出） |
+| `archive.rs` | `zip_directory`（ditto 优先，zip -0 兜底）+ `link_or_copy` |

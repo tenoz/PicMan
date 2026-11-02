@@ -57,19 +57,22 @@ export const BUILTIN_PRESETS: ConfigPreset[] = [
     id: 'quality-first',
     name: '画质优先',
     builtin: true,
-    config: base({ format: 'image/jpeg', quality: 0.9 }),
+    // 走原生 mozjpeg：它的质量本来就好过 canvas，这一档追求的就是最好，多等值得
+    config: base({ format: 'image/jpeg', quality: 0.9, jpegEngine: 'native' }),
   },
   {
     id: 'balanced',
     name: '均衡',
     builtin: true,
+    // 这是默认档，速度优先——原生编码单张慢 6 倍，不该让所有人陪跑
     config: base({ format: 'image/jpeg', quality: 0.82 }),
   },
   {
     id: 'small-size',
     name: '小体积',
     builtin: true,
-    config: base({ format: 'image/jpeg', quality: 0.72 }),
+    // 省 44% 体积正是这一档的诉求。浏览器环境没有 Rust，会自动回退内置编码
+    config: base({ format: 'image/jpeg', quality: 0.72, jpegEngine: 'native' }),
   },
   {
     id: 'web-optimized',

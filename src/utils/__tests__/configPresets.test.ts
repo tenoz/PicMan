@@ -36,6 +36,26 @@ describe('内置预设', () => {
   it('内置预设都标记为 builtin，不允许被删除', () => {
     expect(BUILTIN_PRESETS.every(p => p.builtin)).toBe(true);
   });
+
+  /**
+   * 原生 mozjpeg 的取舍：体积小 44%、质量更好，但单张慢 6 倍（265ms vs 45ms）。
+   * 所以不做全局默认——那等于让只想快转格式的人陪跑。
+   * 但「画质优先」追求的就是最好、「小体积」追求的就是最省，这两档多等值得。
+   */
+  it('JPEG 的「画质优先」「小体积」走原生编码，「均衡」保持内置', () => {
+    const [q, b, s] = BUILTIN_PRESETS;
+    expect(q.config.jpegEngine).toBe('native');
+    expect(s.config.jpegEngine).toBe('native');
+    expect(b.config.jpegEngine).toBe('builtin');
+  });
+
+  it('非 JPEG 输出的预设不带原生编码——jpegEngine 对它们没有意义', () => {
+    const [, , , web, hd] = BUILTIN_PRESETS;
+    expect(web.config.format).toBe('image/webp');
+    expect(hd.config.format).toBe('image/png');
+    expect(web.config.jpegEngine).toBe('builtin');
+    expect(hd.config.jpegEngine).toBe('builtin');
+  });
 });
 
 describe('applyPreset', () => {

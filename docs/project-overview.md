@@ -27,31 +27,34 @@
 | 水印 | 文字或图片，支持平铺、任意角度、透明度、缩放 |
 | 几何变换 | 任意角度旋转、水平/垂直翻转 |
 | 元数据 | JPEG 的 EXIF 可保留或剥离 |
-| 批量控制 | 暂停 / 继续 / 终止，实时进度 |
-| 导出 | ZIP 打包（分批防 OOM）或按原目录结构写回磁盘 |
+| 批量控制 | 暂停 / 继续 / 终止，实时进度；跑完停在原地报结果（成功 / 跳过 / 失败 / 耗时） |
+| 导出 | ZIP 打包或直接写入目录；可扁平化目录、按文件夹分包 |
 
-输入限制：单文件 ≤ 100 MB；建议单批 ≤ 200 张（超过不阻断，但内存与耗时会明显上升）。
+输入限制：单文件 ≤ 100 MB。**批量大小已不受内存限制**（v1.3.0 起产物落盘，内存占用与张数无关），实际瓶颈只剩磁盘空间和单张耗时。
 
 ## 4. 技术栈与平台
 
 - 前端：React 19 + TypeScript + Tailwind CSS v4 + Vite 6
 - 桌面壳：Tauri 1.8（Rust），窗口与文件系统能力
 - 图像处理：浏览器 Canvas 2D（主线程，见架构文档"已知瓶颈"）
-- 测试：Vitest（156 个用例），jsdom 环境
-- 平台：macOS（Apple Silicon / Intel 双包）、Windows、Linux；同时保留纯浏览器运行能力
+- 测试：Vitest（366 个用例），jsdom 环境；压测（500 张）单独跑，不进日常套件
+- 平台：**macOS（Apple Silicon / Intel 双包）是唯一出包并验证过的**；同时保留纯浏览器运行能力（原生编码、本机打包不可用）。Windows / Linux 代码层面基于 Tauri 可编译，但从未出包验证，不算支持。
 
 ## 5. 版本与分发
 
-- 版本号唯一来源是 `package.json`，`npm run version:patch|minor|major` 会自动同步到 `src-tauri/tauri.conf.json` 和 `Cargo.toml`。
-- 提交前有 git hook 校验版本号一致性（`.githooks/`）。
-- 打包产物在 `src-tauri/target/<target>/release/bundle/`，DMG 不入库。
-- 变更记录维护在 `CHANGELOG.md`（Keep a Changelog 格式）。
+- 版本号唯一来源是 `package.json`。升版用 `npm version <patch|minor|major> --no-git-tag-version` 再跑 `npm run version:sync`，一次性同步到 `tauri.conf.json` / `Cargo.toml` / `constants.ts`。
+  **别直接用 `npm run version:minor`**：它会先 commit + tag，而同步发生在那之后，tag 会指向版本号还没对齐的代码。
+- 提交前有 git hook 校验版本号一致性（`.githooks/pre-commit`，靠 `core.hooksPath` 生效）。
+- 打包产物在 **`releases/`**（`scripts/build-dmg.sh` 一键，见 `npm run bundle` / `bundle:x64` / `bundle:all`），DMG 不入库。
+- 变更记录维护在 `CHANGELOG.md`（Keep a Changelog 格式），逐版说明在 `releases/RELEASE_NOTES.md`。
 
-## 6. 当前状态（2026-10-29）
+## 6. 当前状态（2026-11-02）
 
-- 功能已完整，v1.2.2 为最后发布版；自 2026-06-21 起未再打包。
-- 已知问题集中在**性能**（主线程处理、状态全量刷新、内存无上限）和**若干 UI 回归**（进度条不显示、⌘H 失效、列表抖动）。
-- 正在按 `docs/整改计划-v1.3.0.md` 分 P0–P3 整改，当前任务见 `TODO.md`。
+- **v1.3.0 已发布**：macOS 双架构 DMG 在 `releases/`，GitHub Release 带附件。
+- P0–P3 整改已完成：进度条不显示、⌘H 失效、列表抖动、状态全量刷新、**内存无上限**（产物改落盘）、JPEG / PNG 原生编码可选。
+- **内存不再是瓶颈**：产物落盘后占用与批次大小无关，剩下的限制是磁盘空间和单张处理耗时。
+- 剩余待办与待决策见 `TODO.md`。
+- 历史记录（已完成，不必再读）：`docs/整改计划-v1.3.0.md`（P0–P3 计划）、`docs/复盘-2026-11-02.md`（过程与踩坑）。
 
 ## 7. 明确不做
 

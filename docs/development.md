@@ -20,11 +20,12 @@ npm install
 | 桌面窗口开发 | `./start.sh tauri` | 自动把 Tauri `devPath` 对齐到 3000，首次需编译 Rust |
 | 预览生产构建 | `./start.sh preview` | 构建后起 4173 预览 |
 | 生产构建 | `npm run build` | 输出 `dist/`，约 600KB JS |
-| 单元测试 | `npx vitest run` | 143 个用例（`thumbnailGenerator` 会挂死，见 FAQ） |
+| 单元测试 | `npm test` | 366 个用例；压测不在其中（见 §6） |
 | 性能基准 | `npm run test:bench` | 结果写 `benchmark-results.json` |
-| 打包 Apple Silicon | `npm run bundle` | 构建 + 打包 + 自动打开 dmg |
-| 打包 Intel | `npm run bundle:x64` | |
-| 版本号升级 | `npm run version:patch` | 自动同步 tauri.conf / Cargo.toml |
+| 打包 Apple Silicon | `npm run bundle` | 产物落 `releases/`，脚本会打印 md5 / sha256 |
+| 打包 Intel | `npm run bundle:x64` | 同上 |
+| 打包两个架构 | `npm run bundle:all` | 同上 |
+| 版本号升级 | 见 §8 发版流程 | **别直接用 `version:minor`**，会打错 tag |
 
 不想开终端时，双击 `/Applications/PicMan 启动.command`：弹出「浏览器开发 / 桌面窗口 / 预览构建版」三选一，实际执行的就是 `./start.sh` 对应模式。
 
@@ -37,7 +38,7 @@ npm install
 
 ## 4. 写代码的约束
 
-1. **类型**：禁止 `@ts-ignore` / `as any`。历史遗留的 `// @ts-ignore`（8 处，主要在 `window.__TAURI__` 相关）改到时顺手用声明文件替换。
+1. **类型**：禁止 `@ts-ignore` / `as any`。历史遗留的 `// @ts-ignore` **14 处**（`App.tsx` / `utils/index.ts` / `ImportZone.tsx` / `useExport.ts` / `imageProcessor.ts`，主要在 `window.__TAURI__` 相关），改到时顺手用声明文件替换。
 2. **异常**：禁止空 `catch {}`。要么处理，要么记日志，要么明确注释为什么可以吞。
 3. **新增配置项**：必须同时改 `src/types.ts`（类型）+ `src/constants.ts`（`DEFAULT_CONFIG` 默认值），否则老用户的 localStorage 配置读出来会缺字段。
 4. **改 `ProcessingConfig` 结构**：要在 `App.tsx` 初始化 config 的地方加迁移逻辑（已有先例：`image/avif` 回退、`preventSizeInflation` 补默认值）。
@@ -94,15 +95,35 @@ WKWebView 接不上 Chrome DevTools，所以原生命令靠「探针页 + 结果
 ## 8. 提交与发版
 
 - 提交信息：`类型(范围): 说明`，类型用 `feat` / `fix` / `refactor` / `chore` / `docs` / `perf`。
-- 提交前有 hook 校验 `package.json` 与 `Cargo.toml` / `tauri.conf.json` 版本一致。
-- 发版流程：`npm run version:patch` → 更新 `CHANGELOG.md` → `npm run bundle` → 提 tag。
-- DMG 不进 git（`.gitignore` 已排除 `*.dmg`）。
+- 提交前有 hook 校验 `package.json` 与 `Cargo.toml` / `tauri.conf.json` / `constants.ts` 版本一致（`.githooks/pre-commit`，靠 `core.hooksPath` 生效）。
+- **发版流程见 `AGENTS.md` 的「发版流程」一节**，这里只强调最容易弄反的一步：**tag 必须打在打包之前**。产物要由 tag 指向的那份代码构建，否则「这个包里是哪版代码」说不清。
+- DMG 不进 git（`.gitignore` 已排除 `*.dmg`），只有 `releases/RELEASE_NOTES.md` 入库。
+
+### 公开发布：远端只放快照
+
+**远端 `main` 从 2026-11-02 起只保留发布快照**，不携带本地开发历史。做法是用 `git commit-tree` 从当前树造一个**没有父提交的孤儿提交**，再 force push：
+
+```bash
+NEW=$(git commit-tree "$(git rev-parse HEAD^{tree})" -m "PicMan v<ver>")
+git push origin "${NEW}:refs/heads/main" --force
+git push origin "${NEW}:refs/tags/v1.3.0"
+```
+
+> **`git push --tags` 会把 tag 身后整条历史一起推上去**。想只发快照，就必须走孤儿提交——这是唯一的路。
+
+**下次发版**：把上一次的孤儿提交当父提交，远端就能有版本链（1.3.0 → 1.3.1），但仍然不含内部开发史：
+
+```bash
+NEW=$(git commit-tree "$(git rev-parse HEAD^{tree})" -p <上次孤儿提交> -m "...")
+```
+
+**本地与远端是故意分叉的**：本地 `main` 保留 100+ 个提交的完整历史，远端只有一个快照提交，两者**没有共同祖先**。所以 `git status` 会显示 diverged、直接 `git push` 会被拒——这是预期状态，别去"修复"它。
 
 ## 9. 常见问题
 
-**`npm run tauri:dev` 白屏** —— `vite.config.ts` 端口是 3000，`tauri.conf.json` 的 `devPath` 是 5173，两者不一致。用 `./start.sh tauri` 绕过（脚本用 `tauri dev --config` 临时覆盖）；要根治就两处一起改。
+**`npm run tauri:dev` 白屏** —— 端口不一致的老问题 **2026-11-01 已修**（`vite.config.ts` 与 `tauri.conf.json` 现在都是 3000）。若再现，先核对这两处；别只改一边，改了必白屏。
 
-**打包出来的 dmg 找不到** —— 带 `--target` 时路径是 `src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/`，不是 `target/release/bundle/`。
+**打包出来的 dmg 找不到** —— 脚本会把完整路径打印出来，产物在 `releases/PicMan_<版本>_<架构>.dmg`，**不在** `src-tauri/target/` 下面。
 
 **导出到外置硬盘失败** —— `tauri.conf.json` 的 `fs.scope` 需要包含 `/Volumes/**`（已配置）。
 
