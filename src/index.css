@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+}
+
+/* 可点击元素统一手型：浏览器给 <button> 的默认游标是箭头，
+   靠每个组件手写 cursor-pointer 太容易漏，这里兜一次底。
+   放在 base 层，组件里的 cursor-* utilities 仍然优先。 */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  select:not(:disabled),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+}
+
+/* ------------------------------------------------------------------
+   进度条斜条纹（循环滚动）
+   底色仍由各组件的 bg-* 提供，这里只叠一层白色半透明斜纹并让它一直滚。
+   宽度照旧反映真实进度，条纹只负责"它还在动"的观感。
+   对应 Bootstrap 的 progress-bar-striped + progress-bar-animated。
+   ------------------------------------------------------------------ */
+@keyframes picman-stripes {
+  from { background-position-x: 0; }
+  to   { background-position-x: var(--stripe-size); }
+}
+
+.progress-stripes {
+  --stripe-size: 12px;
+  background-image: linear-gradient(
+    45deg,
+    rgb(255 255 255 / 0.38) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgb(255 255 255 / 0.38) 50%,
+    rgb(255 255 255 / 0.38) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: var(--stripe-size) var(--stripe-size);
+  animation: picman-stripes 0.75s linear infinite;
+}
+
+/* 说明：这两个动效**故意不响应** prefers-reduced-motion。
+   进度条是功能性指示——它不动，用户会以为任务卡死了；
+   这不是装饰性动画，降级成静止反而传递了错误信息。
+   （2026-11-01：老大系统开着「减弱动态效果」，一开始做了降级，
+     结果进度条完全看不出在跑，被当成 bug 报回来。） */
+
+
+/* ------------------------------------------------------------------
+   进度不确定时的「来回跑」指示条
+   打包这种事拿不到准的百分比，与其显示一个跳来跳去的数字，
+   不如给一段等宽色块来回跑，只表达「它在忙」。
+   宽度 40%、从 0 移到 60%（translateX 150% 是相对自身宽度算的）。
+   ------------------------------------------------------------------ */
+@keyframes picman-runner {
+  from { transform: translateX(0); }
+  to   { transform: translateX(150%); }
+}
+
+.pb-runner {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  border-radius: 999px;
+  animation: picman-runner 1.15s ease-in-out infinite alternate;
+}
+
+/* ------------------------------------------------------------------
+   信息提示条入场：淡入 + 轻微下落（出场由组件的 opacity 过渡接管）。
+   跟上面两个进度条动效不同——**这个纯粹是装饰**，系统开了
+   「减弱动态效果」就该关掉。进度条那个是功能性的，不能关（见上面的说明）。
+   ------------------------------------------------------------------ */
+@keyframes picman-fade-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: picman-fade-in 200ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in { animation: none; }
+}
+
+

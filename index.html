@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图片侠 PicMan - 离线批量处理</title>
+    <script>
+      /*
+        首屏定色。
+        App 的 effect 要等 React 挂载后才跑，深色系统用户会先看到一帧白闪；
+        这里在样式生效前就把 .dark 挂到 <html> 上。
+        判定规则必须与 src/utils/theme.ts 的 resolveIsDark 保持一致：
+        存的是 'light' 就绝不跟系统；存的不是合法值（含脏数据）一律按跟随系统处理。
+      */
+      (function () {
+        try {
+          var raw = localStorage.getItem('theme');
+          var mode = raw ? JSON.parse(raw) : 'system';
+          var dark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* 读不出来就按亮色渲染，React 挂载后 effect 会立刻纠正 */
+        }
+      })();
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "uuid": "https://esm.sh/uuid@^13.0.0",
+    "jszip": "https://esm.sh/jszip@^3.10.1",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react-dropzone": "https://esm.sh/react-dropzone@^14.4.0",
+    "file-saver": "https://esm.sh/file-saver@^2.0.5",
+    "tailwind-merge": "https://esm.sh/tailwind-merge@^3.4.0",
+    "clsx": "https://esm.sh/clsx@^2.1.1",
+    "piexifjs": "https://esm.sh/piexifjs@1.0.6"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200">
+    <div id="root"></div>
+  <script type="module" src="/src/index.tsx"></script>
+</body>
+</html>

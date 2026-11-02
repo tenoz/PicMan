@@ -1,0 +1,3 @@
+#!/bin/sh
+# Pre-commit hook: 检查版本号是否一致
+node scripts/sync-version.mjs --check
